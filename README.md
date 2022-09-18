@@ -12,7 +12,7 @@ So, given that you have a [petstore-like API definition](https://petstore.swagge
 Check out [tests](https://github.com/Shaddix/playwright-swagger/blob/963de857fd6abbe42ad1172f47cd118b2efe3a05/examples/pet-client/src/_tests/App.test.tsx#L11) for few examples.
 Shortly, mocking GET requests will look like this:
 ```ts
-Nock.getPetById({ id: 1 } /* GET parameters with type & intellisense */)
+PWMock.getPetById({ id: 1 } /* GET parameters with type & intellisense */)
   .reply({ id:1, name: 'mypet' });
 ```
 It's not that different from the Nock itself, just that:
