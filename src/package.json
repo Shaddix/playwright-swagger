@@ -14,7 +14,7 @@
     "swagger",
     "openapi",
     "typescript",
-    "nswag"
+    "playwright"
   ],
   "scripts": {
     "prepublish": "copyfiles -u 1 ../README.md ./"
