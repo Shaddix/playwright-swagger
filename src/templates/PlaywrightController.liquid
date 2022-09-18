@@ -1,0 +1,150 @@
+
+{%- if HasOperations -%}
+{%- assign PWMockClassName = Class | prepend: 'Qqqqqq' | slice: 0, Class.size | append: "PWMock" | slice: 6, 1000 -%}
+
+{%- for operation in Operations -%}
+{%-   if operation.QueryParameters.size > 0 or operation.PathParameters.size > 0 -%}
+
+{%- assign firstLetter = operation.ActualOperationName | slice: 0, 1 | upcase -%}
+{%- assign pathParameterClassName = operation.ActualOperationName | append: 'q' | slice: 1, operation.ActualOperationName.size | prepend: firstLetter | slice: 0, operation.ActualOperationName.size | append: PWMockClassName | append: 'PathParameters' -%}
+{%- assign parameterClassName = operation.ActualOperationName | append: 'q' | slice: 1, operation.ActualOperationName.size | prepend: firstLetter | slice: 0, operation.ActualOperationName.size | append: PWMockClassName | append: 'Parameters' -%}
+{%- if operation.PathParameters.size > 0 -%}
+type {{ pathParameterClassName }} = {
+  {%- for parameter in operation.PathParameters -%}
+    {{ parameter.VariableName }}{% if GenerateOptionalParameters and parameter.IsOptional %}?{% endif %}: {{ parameter.Type }}{{ parameter.TypePostfix }};
+  {%- endfor -%}
+}
+{%- endif -%}
+type {{ parameterClassName }} = {
+  {%- for parameter in operation.QueryParameters -%}
+  {{ parameter.VariableName }}?: {{ parameter.Type }}{{ parameter.TypePostfix }};
+  {%- endfor -%}
+}{%- if operation.PathParameters.size > 0 -%} & {{ pathParameterClassName }} {%- endif -%};
+
+{%-   endif -%}
+{%- endfor -%}
+
+export const {{ PWMockClassName }} = {
+{%- for operation in Operations -%}
+{%- if operation.HttpMethodUpper == 'Get' or operation.HttpMethodUpper == 'Post' or operation.HttpMethodUpper == 'Put' or operation.HttpMethodUpper == 'Patch' or operation.HttpMethodUpper == 'Delete' -%}
+  {%- assign BodyParameterName = '' -%}
+  {%- assign BodyParameterType = '' -%}
+  {%- for parameter in operation.Parameters -%}
+    {%- if parameter.IsBody -%}
+      {%- assign BodyParameterName = parameter.VariableName -%}
+      {%- assign BodyParameterType = parameter.Type | append: parameter.TypePostfix  -%}
+    {%- endif -%}
+  {%- endfor -%}
+
+  {%- assign ResultType = operation.ResultType -%}
+  {%- assign UseInterfaceResult = false -%}
+  {%- if ResultType != 'string' and ResultType != 'number' and ResultType != 'boolean' and ResultType != 'Date' and ResultType != 'void' -%}
+    {%- assign firstResultSymbol = ResultType | slice: 0 -%}
+    {%- assign lastSymbols = ResultType | slice: -2, 2 -%}
+    {%- if firstResultSymbol != '{' and lastSymbols != '[]' -%}
+      {%- assign OriginalResultType = ResultType -%}
+      {%- assign ResultType = ResultType | prepend: 'I' -%}
+      {%- assign UseInterfaceResult = true -%}
+    {%- endif -%}
+  {%- endif -%}
+  {%- assign firstLetter = operation.ActualOperationName | slice: 0, 1 | upcase -%}
+  {%- assign parameterClassName = operation.ActualOperationName | append: 'q' | slice: 1, operation.ActualOperationName.size | prepend: firstLetter | slice: 0, operation.ActualOperationName.size | append: PWMockClassName | append: 'Parameters' -%}
+  {%- assign pathParameterClassName = operation.ActualOperationName | append: 'q' | slice: 1, operation.ActualOperationName.size | prepend: firstLetter | slice: 0, operation.ActualOperationName.size | append: PWMockClassName | append: 'PathParameters' -%}
+
+  {%- if operation.HasDocumentation -%}
+  /*
+  {%-     if operation.HasSummary -%}
+  * {{ operation.Summary }}
+  {%-     endif -%}
+  {%-     if operation.IsDeprecated -%}
+  * @deprecated
+  {%-     endif -%}
+  */
+  {% endif -%}
+  {{- operation.ActualOperationName }}: (
+    context: ObjectWithRouteFn,
+    {%- if operation.PathParameters.size > 0 %}routeParams: {{ pathParameterClassName }},{%- endif -%}
+    handler: (
+      route: Route & {
+        fulfillBody: (
+          params: Omit<Parameters<Route['fulfill']>[0], 'body'> & {
+            body: {{ ResultType }};
+          },
+        ) => void;
+      },
+      request: Request{% if operation.QueryParameters.size > 0 or operation.PathParameters.size > 0 -%} & {
+        queryParams: {{ parameterClassName }},
+      }{%- endif -%}{%- if BodyParameterType != '' -%} & {
+        body: {{ BodyParameterType }},
+      }{%- endif -%},
+    ) => void,
+  ) => {
+    {% template Path %}
+    context.route(new RegExp(getBaseUrl() + url_ + '([?]|$)'), (route, request) => {
+
+      {%- if operation.QueryParameters.size > 0 or operation.PathParameters.size > 0 %}
+      const url = new URL(request.url());
+      const urlParams = {{ PWMockClassName }}.parse{{ operation.ActualOperationNameUpper }}Url(url);
+      {%- endif -%}
+      (route as any).fulfillBody = (params: any) => {
+        route.fulfill({
+          ...params,
+          body: JSON.stringify(params.body),
+        });
+      };
+      handler(route as any, {
+        ...request,
+        {%- if BodyParameterType != '' -%}body: request.postDataJSON(),{%- endif -%}
+        {%- if operation.QueryParameters.size > 0 or operation.PathParameters.size > 0 -%}queryParams: urlParams,{%- endif -%}
+      });
+    });
+  },
+
+  {%- if operation.QueryParameters.size > 0 or operation.PathParameters.size > 0 %}
+  parse{{ operation.ActualOperationNameUpper }}Url(url: URL): {{ parameterClassName }} {
+  {%- if operation.PathParameters.size > 0 -%}
+    let regex = "/{{ operation.Path }}([?]|$)";
+    {%- for parameter in operation.PathParameters -%}
+      regex = regex.replace("{{ "{" }}{{ parameter.Name }}}", "(?<{{ parameter.Name }}>.*?)");
+    {%- endfor -%}
+    const match = new RegExp(regex).exec(url.pathname);
+  {%- endif -%}
+
+  const queryParams = {
+  {%- for parameter in operation.QueryParameters -%}
+    {{ parameter.VariableName | replace: ".", "_" }}: {%- if parameter.IsArray -%}url.searchParams.getAll('{{ parameter.Name }}'){% else %}url.searchParams.get('{{ parameter.Name }}'){% endif %},
+  {%- endfor -%}
+  {%- for parameter in operation.PathParameters -%}
+    {{ parameter.VariableName | replace: ".", "_" }}: match?.groups?.['{{ parameter.Name }}'],
+  {%- endfor -%}
+  };
+
+  return {
+  {%- assign allParams = operation.QueryParameters | concat: operation.PathParameters  -%}
+  {%- for parameter in allParams -%}
+    {%- assign varName = parameter.VariableName | replace: ".", "_" -%}
+    {{ varName }}: !queryParams.{{ varName }} ? queryParams.{{ varName  }}
+    :
+    {%-     if parameter.IsDateArray -%}
+      queryParams.{{ varName }}.map(x => parseDate(x)) as any
+    {%-     elsif parameter.IsDateOrDateTimeArray -%}
+      queryParams.{{ varName }}.map(x => new Date(x)) as any
+    {%-     elsif parameter.IsArray -%}
+      queryParams.{{ varName }} as any
+    {%-     elsif parameter.IsDate -%}
+      parseDate(queryParams.{{ varName }}) as any
+    {%-     elsif parameter.IsDateOrDateTime -%}
+      new Date(queryParams.{{ varName }}) as any
+    {%-     elsif parameter.Type == 'number' -%}
+      parseInt(queryParams.{{ varName }}) as any
+    {%-     else -%}
+      queryParams.{{ varName }} as any
+    {%-     endif -%},
+  {%- endfor -%}
+  };
+  },
+  {% endif -%}
+{% endif -%}
+{% endfor -%}
+}
+{% endif -%}

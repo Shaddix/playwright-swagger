@@ -1,0 +1,16 @@
+{
+  "private": true,
+  "workspaces": [
+    "examples/*",
+    "src"
+  ],
+  "nohoist": [],
+  "scripts": {
+    "do-publish": "yarn workspace playwright-swagger publish",
+    "start": "yarn workspace pet-client start",
+    "typecheck": "yarn workspace playwright-swagger tsc && yarn workspace pet-client tsc",
+    "test": "yarn typecheck && yarn workspace pet-client test-ct",
+    "test-all": "yarn generate-mock && yarn typecheck && yarn workspace pet-client test",
+    "generate-mock": "yarn workspace pet-client generate-mock"
+  }
+}

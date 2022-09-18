@@ -1,0 +1,26 @@
+import { Page, Route, Request } from 'playwright-core';
+
+type ObjectWithRouteFn = Pick<Page, 'route'>;
+
+let _baseUrl = '';
+/*
+Returns the base URL for http requests
+*/
+export function getBaseUrl(): string {
+  return _baseUrl;
+}
+
+/*
+Sets the base URL for http requests
+*/
+export function setBaseUrl(baseUrl: string) {
+  _baseUrl = baseUrl;
+}
+
+type IFileResponse = {
+    data: Blob;
+    status: number;
+    fileName?: string;
+    headers?: { [name: string]: any };
+};
+type Iany = any;
